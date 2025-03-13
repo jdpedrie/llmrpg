@@ -1,0 +1,27 @@
+module default {
+    type Character {
+        required name: str;
+        description: str;
+        context: array<str>;
+        required active: bool;
+        required main_character: bool;
+        stats: array<tuple<name: str, value: int16>>;
+        characteristics: array<tuple<name: str, value: int16>>;
+        relationship: array<tuple<name: str, value: int16>>;
+    };
+
+    type Game {
+        required name: str;
+        description: str;
+        multi characters: Character;
+        starting_message: str;
+        scenario: str;
+        objectives: str;
+        is_template: bool;
+        is_running: bool;
+        playthrough_start_time: datetime;
+        playthrough_end_time: datetime;
+        last_activity_time: datetime;
+        create_time: datetime;
+    };
+}
