@@ -3,20 +3,25 @@ module github.com/jdpedrie/llmrpg
 go 1.24.0
 
 require (
+	connectrpc.com/connect v1.18.1
 	github.com/awesome-gocui/gocui v1.1.0
 	github.com/charmbracelet/bubbles v0.20.0
 	github.com/charmbracelet/bubbletea v1.3.4
+	github.com/charmbracelet/lipgloss v1.0.0
 	github.com/geldata/gel-go v1.1.0
 	github.com/urfave/cli/v2 v2.27.6
 	github.com/weaviate/weaviate v1.27.0
+	golang.org/x/net v0.29.0
+	golang.org/x/term v0.28.0
+	google.golang.org/protobuf v1.34.2
 )
 
 require (
+	connectrpc.com/grpcreflect v1.3.0 // indirect
 	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/certifi/gocertifi v0.0.0-20210507211836-431795d63e8d // indirect
-	github.com/charmbracelet/lipgloss v1.0.0 // indirect
 	github.com/charmbracelet/x/ansi v0.8.0 // indirect
 	github.com/charmbracelet/x/term v0.2.1 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.5 // indirect
@@ -56,7 +61,6 @@ require (
 	golang.org/x/exp v0.0.0-20230713183714-613f0c0eb8a1 // indirect
 	golang.org/x/sync v0.11.0 // indirect
 	golang.org/x/sys v0.30.0 // indirect
-	golang.org/x/term v0.28.0 // indirect
 	golang.org/x/text v0.21.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

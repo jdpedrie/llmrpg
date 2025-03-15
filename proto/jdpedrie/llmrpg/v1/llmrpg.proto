@@ -1,0 +1,78 @@
+edition = "2023";
+
+package v1;
+
+import "google/protobuf/timestamp.proto";
+
+option features.field_presence = IMPLICIT;
+option go_package = "github.com/jdpedrie/llmrpg/genproto/jdpedrie/llmrpg/v1";
+
+service LLMRPGService {
+    rpc StartGame(StartGameRequest) returns (StartGameResponse);
+
+    rpc CreateGame(CreateGameRequest) returns (CreateGameResponse);
+}
+
+message StartGameRequest {
+    string template_id = 1;
+}
+
+message StartGameResponse {
+    string game_id = 1;
+}
+
+message CreateGameRequest {
+    Game game = 1;
+}
+
+message CreateGameResponse {
+    Game game = 1;
+}
+
+message Game {
+    string id = 1;
+    string name = 2;
+    string description = 3;
+    repeated Character characters = 4;
+    string starting_message = 5;
+    string scenario = 6;
+    string objectives = 7;
+
+    repeated string skills = 8;
+    repeated string characteristics = 9;
+    repeated string relationship = 10; // protolint:disable:this REPEATED_FIELD_NAMES_PLURALIZED
+
+    bool is_template = 11;
+    bool is_running = 12;
+
+    google.protobuf.Timestamp playthrough_start_time = 13;
+    google.protobuf.Timestamp playthrough_end_time = 14;
+    google.protobuf.Timestamp last_activity_time = 15;
+    google.protobuf.Timestamp create_time = 16;
+}
+
+message Character {
+    string id = 1;
+    string name = 2;
+    string description = 3;
+    repeated string context = 4; // protolint:disable:this REPEATED_FIELD_NAMES_PLURALIZED
+    bool active = 5;
+    bool main_character = 6;
+    repeated CharacterAttribute skills = 7;
+    repeated CharacterAttribute characteristics = 8;
+    repeated CharacterAttribute relationship = 9; // protolint:disable:this REPEATED_FIELD_NAMES_PLURALIZED
+}
+
+message CharacterAttribute {
+    string id = 1;
+    string name = 2;
+    int32 value = 3;
+}
+
+message History {
+    string id = 1;
+    string game_id = 2;
+    string text = 3;
+    string choice = 4;
+    string outcome = 5;
+}

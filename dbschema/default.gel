@@ -1,27 +1,92 @@
+using extension ai;
+
 module default {
     type Character {
         required name: str;
         description: str;
         context: array<str>;
-        required active: bool;
-        required main_character: bool;
-        stats: array<tuple<name: str, value: int16>>;
-        characteristics: array<tuple<name: str, value: int16>>;
-        relationship: array<tuple<name: str, value: int16>>;
+
+        required active: bool {
+            default := false;
+        };
+        required main_character: bool {
+            default := false;
+        };
+
+        multi skills: CharacterAttribute {
+            on source delete delete target;
+        };
+        multi characteristics: CharacterAttribute {
+            on source delete delete target;
+        };
+        multi relationship: CharacterAttribute {
+            on source delete delete target;
+        };
     };
 
     type Game {
         required name: str;
         description: str;
-        multi characters: Character;
+        multi characters: Character {
+            on source delete delete target;
+        };
         starting_message: str;
         scenario: str;
         objectives: str;
-        is_template: bool;
-        is_running: bool;
+
         playthrough_start_time: datetime;
         playthrough_end_time: datetime;
         last_activity_time: datetime;
         create_time: datetime;
+
+        required is_template: bool {
+            default := false;
+        };
+        required is_running: bool {
+            default := false;
+        };
+
+        # the names of character skill attributes for the game.
+        skills: array<str>;
+        # the names of character characteristic attributes for the game.
+        characteristics: array<str>;
+        # the names of character relationship attributes for the game.
+        relationship: array<str>;
+
+        constraint expression on (
+            not __subject__.is_running OR (
+                __subject__.is_template OR (
+                    __subject__.description = "" OR
+                    __subject__.starting_message = "" OR
+                    __subject__.scenario = "" OR
+                    __subject__.objectives = "" OR
+                    not exists __subject__.skills OR
+                    not exists __subject__.characteristics OR
+                    not exists __subject__.relationship
+                )
+            )
+        ) {
+            errmessage := "game data not fully satisfied, cannot set is_running to true";
+        };
+    };
+
+    type History {
+        required text: str;
+        required choice: str;
+        required outcome: str;
+        required game: Game;
+        create_time: datetime;
+
+        deferred index ext::ai::index(embedding_model := 'text-embedding-3-small') on (
+            .text ++ ' ' ++ .choice
+        );
+    };
+
+    type CharacterAttribute {
+        required name: str;
+        required value: int16 {
+            constraint max_value(10);
+            constraint min_value(-10);
+        };
     };
 }

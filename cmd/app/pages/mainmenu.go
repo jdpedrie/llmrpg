@@ -19,7 +19,7 @@ type MainMenuModel struct {
 
 func NewMainMenuModel() *MainMenuModel {
 	return &MainMenuModel{
-		menuItems: []string{"Open Screen", "Wizard Form", "Quit"},
+		menuItems: []string{"New Game", "Open Screen", "Wizard Form", "Quit"},
 	}
 }
 
@@ -28,7 +28,7 @@ func (m *MainMenuModel) Init() tea.Cmd {
 	return nil
 }
 
-func (m *MainMenuModel) Update(msg tea.Msg) (Page, tea.Cmd) {
+func (m *MainMenuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -43,10 +43,13 @@ func (m *MainMenuModel) Update(msg tea.Msg) (Page, tea.Cmd) {
 		case "enter":
 			switch m.cursor {
 			case 0:
-				// Switch to Screen
 				return m, func() tea.Msg {
-					return SwitchPageMsg{PageName: "screen"}
+					return SwitchPageMsg{PageName: "newgame"}
 				}
+				// // Switch to Screen
+				// return m, func() tea.Msg {
+				// 	return SwitchPageMsg{PageName: "screen"}
+				// }
 			case 1:
 				// Switch to Wizard
 				return m, func() tea.Msg {

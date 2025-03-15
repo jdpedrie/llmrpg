@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/jdpedrie/llmrpg/models"
+	"github.com/jdpedrie/llmrpg/model"
 )
 
 type Gamemaster struct {
@@ -12,9 +12,9 @@ type Gamemaster struct {
 	AllowAnyResponse bool     `json:"allow_any_response"`
 	GameOver         bool     `json:"game_over"`
 
-	ModifiedCharacters []models.Character `json:"modified_characters"`
-	AddedHistory       []string           `json:"added_history"`
-	AddedContext       []string           `json:"added_context"`
+	ModifiedCharacters []model.Character `json:"modified_characters"`
+	AddedHistory       []string          `json:"added_history"`
+	AddedContext       []string          `json:"added_context"`
 }
 
 type Choice struct {
