@@ -26,19 +26,49 @@ func (e *Engine) StartGame(ctx context.Context, templateID string) (*GameEngine,
 	}
 
 	var tpl model.Game
-	q := `SELECT Game {**} FILTER .id = <uuid>$0 AND .is_template = <bool>TRUE`
+	q := `SELECT Game {
+		*,
+		characters: {
+			*,
+			skills: {**},
+			characteristics: {**},
+			relationship: {**}
+		}
+	} FILTER .id = <uuid>$0 AND .is_template = <bool>TRUE`
 	if err := e.db.QuerySingle(ctx, q, &tpl, templateUUID); err != nil {
 		return nil, err
 	}
 
+	tpl.IsTemplate = false
+	tpl.IsRunning = true
+
+	if err := e.CreateGame(ctx, &tpl); err != nil {
+		return nil, err
+	}
+
 	return &GameEngine{
-		db: e.db,
-		// gameID: gameID,
+		db:     e.db,
+		gameID: tpl.ID.String(),
 	}, nil
 }
 
 func (e *Engine) CreateGame(ctx context.Context, game *model.Game) error {
 	return db.Insert(ctx, e.db, game)
+}
+
+func (e *Engine) GetGame(ctx context.Context, id string) (*model.Game, error) {
+	gameID, err := geltypes.ParseUUID(id)
+	if err != nil {
+		return nil, err
+	}
+
+	var game model.Game
+	if err := e.db.QuerySingle(ctx, `SELECT Game{
+		*, Character.**} FILTER .id = <uuid>$0`, &game, gameID); err != nil {
+		return nil, err
+	}
+
+	return &game, nil
 }
 
 type GameEngine struct {

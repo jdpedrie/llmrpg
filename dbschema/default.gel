@@ -36,8 +36,12 @@ module default {
 
         playthrough_start_time: datetime;
         playthrough_end_time: datetime;
-        last_activity_time: datetime;
-        create_time: datetime;
+        last_activity_time: datetime {
+            rewrite update using (datetime_of_statement())
+        };
+        required create_time: datetime {
+            rewrite insert using (datetime_of_statement())
+        };
 
         required is_template: bool {
             default := false;
@@ -55,18 +59,18 @@ module default {
 
         constraint expression on (
             not __subject__.is_running OR (
-                __subject__.is_template OR (
-                    __subject__.description = "" OR
-                    __subject__.starting_message = "" OR
-                    __subject__.scenario = "" OR
-                    __subject__.objectives = "" OR
-                    not exists __subject__.skills OR
-                    not exists __subject__.characteristics OR
-                    not exists __subject__.relationship
+                not __subject__.is_template AND (
+                    __subject__.description != "" AND
+                    __subject__.starting_message != "" AND
+                    __subject__.scenario != "" AND
+                    __subject__.objectives != "" AND
+                    exists __subject__.skills AND
+                    exists __subject__.characteristics AND
+                    exists __subject__.relationship
                 )
             )
         ) {
-            errmessage := "game data not fully satisfied, cannot set is_running to true";
+            errmessage := "game is a template or data not fully satisfied; cannot set is_running to true";
         };
     };
 
@@ -74,8 +78,11 @@ module default {
         required text: str;
         required choice: str;
         required outcome: str;
+        required create_time: datetime {
+            rewrite insert using (datetime_of_statement())
+        };
+
         required game: Game;
-        create_time: datetime;
 
         deferred index ext::ai::index(embedding_model := 'text-embedding-3-small') on (
             .text ++ ' ' ++ .choice

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"reflect"
 	"strings"
 
@@ -16,16 +15,14 @@ type Model interface {
 	DBType() string
 }
 
-// Insert function - builds and executes the query dynamically using reflection.
+// Insert builds and executes the query dynamically using reflection.
+// The given `model` is updated with the result of the operation.
+// Note that nested object IDs may not be populated.
 func Insert(ctx context.Context, client *gel.Client, model Model) error {
 	query, args, err := buildInsertQuery(model, 0)
 	if err != nil {
 		return err
 	}
-
-	log.Println(query, args)
-
-	// return client.Execute(ctx, query, args...)
 
 	return client.QuerySingle(ctx, fmt.Sprintf(
 		`with ins := (%s) select ins`, query,
@@ -33,6 +30,7 @@ func Insert(ctx context.Context, client *gel.Client, model Model) error {
 }
 
 // Recursive function to build the query and arguments list.
+// 🤮
 func buildInsertQuery(model Model, argIndex int) (string, []any, error) {
 	modelType := model.DBType()
 	fieldValues, err := extractFields(model)
@@ -62,13 +60,18 @@ func buildInsertQuery(model Model, argIndex int) (string, []any, error) {
 				cast = "<int32>"
 			case int64:
 				cast = "<int64>"
+			case float32:
+				cast = "<float32>"
+			case float64:
+				cast = "<float64>"
 			}
+
 			qp = fmt.Sprintf("%s := %s$%d", fieldName, cast, argIndex)
 			args = append(args, v)
 			queryParts = append(queryParts, qp)
 			argIndex++
 
-		case []string, []int16, []int32, []int64, []bool, []float64: // **Newly added support for lists of scalars**
+		case []string, []int16, []int32, []int64, []bool, []float64:
 			var cast string
 			switch v.(type) {
 			case []string:
@@ -125,6 +128,32 @@ func buildInsertQuery(model Model, argIndex int) (string, []any, error) {
 				args = append(args, v)
 				queryParts = append(queryParts, qp)
 				argIndex++
+			} else if m, ok := v.(Model); ok {
+				subQuery, subArgs, err := buildInsertQuery(m, argIndex)
+				if err != nil {
+					return "", nil, err
+				}
+				qp = fmt.Sprintf("%s := (%s)", fieldName, subQuery)
+				queryParts = append(queryParts, qp)
+				args = append(args, subArgs...)
+				argIndex += len(subArgs)
+			} else if arr, ok := v.([]any); ok {
+				if _, ok := arr[0].(Model); ok && len(arr) > 0 {
+					nestedQueries := []string{}
+					nestedArgs := []any{}
+					for _, nested := range arr {
+						subQuery, subArgs, err := buildInsertQuery(nested.(Model), argIndex)
+						if err != nil {
+							return "", nil, err
+						}
+						nestedQueries = append(nestedQueries, "("+subQuery+")")
+						nestedArgs = append(nestedArgs, subArgs...)
+						argIndex += len(subArgs)
+					}
+					qp = fmt.Sprintf("%s := {%s}", fieldName, strings.Join(nestedQueries, ", "))
+					queryParts = append(queryParts, qp)
+					args = append(args, nestedArgs...) // Properly append all nested args
+				}
 			} else {
 				return "", nil, fmt.Errorf("unsupported field type: %v", reflect.TypeOf(v))
 			}
@@ -137,7 +166,8 @@ func buildInsertQuery(model Model, argIndex int) (string, []any, error) {
 	return sb.String(), args, nil
 }
 
-// extractFields - uses reflection to get field values based on `gel` struct tag.
+// extractFields - uses reflection to get field values and field names based
+// on the `gel` struct tag.
 func extractFields(model Model) (map[string]any, error) {
 	result := map[string]any{}
 	value := reflect.ValueOf(model)
@@ -153,7 +183,7 @@ func extractFields(model Model) (map[string]any, error) {
 	}
 
 	// Iterate over struct fields
-	for i := 0; i < typ.NumField(); i++ {
+	for i := range typ.NumField() {
 		field := typ.Field(i)
 		tag := field.Tag.Get("gel")
 		if tag == "" {
@@ -185,7 +215,7 @@ func extractFields(model Model) (map[string]any, error) {
 		if fieldType.Kind() == reflect.Slice || fieldType.Kind() == reflect.Array {
 			slice := fieldValue
 			modelSlice := []Model{}
-			for j := 0; j < slice.Len(); j++ {
+			for j := range slice.Len() {
 				if item, ok := slice.Index(j).Interface().(Model); ok {
 					modelSlice = append(modelSlice, item)
 				}
@@ -245,16 +275,16 @@ var gelTypeMap = map[reflect.Type]string{
 	reflect.TypeOf(geltypes.MultiRangeLocalDateTime{}):    "",
 	reflect.TypeOf(geltypes.Optional{}):                   "",
 	reflect.TypeOf(geltypes.OptionalBigInt{}):             "OPTIONAL bigint",
-	reflect.TypeOf(geltypes.OptionalBool{}):               "",
-	reflect.TypeOf(geltypes.OptionalBytes{}):              "",
-	reflect.TypeOf(geltypes.OptionalDateDuration{}):       "",
+	reflect.TypeOf(geltypes.OptionalBool{}):               "OPTIONAL bool",
+	reflect.TypeOf(geltypes.OptionalBytes{}):              "OPTIONAL bytes",
+	reflect.TypeOf(geltypes.OptionalDateDuration{}):       "OPTIONAL date_duration",
 	reflect.TypeOf(geltypes.OptionalDateTime{}):           "OPTIONAL datetime",
 	reflect.TypeOf(geltypes.OptionalDuration{}):           "OPTIONAL duration",
-	reflect.TypeOf(geltypes.OptionalFloat32{}):            "",
-	reflect.TypeOf(geltypes.OptionalFloat64{}):            "",
-	reflect.TypeOf(geltypes.OptionalInt16{}):              "",
-	reflect.TypeOf(geltypes.OptionalInt32{}):              "",
-	reflect.TypeOf(geltypes.OptionalInt64{}):              "",
+	reflect.TypeOf(geltypes.OptionalFloat32{}):            "OPTIONAL float32",
+	reflect.TypeOf(geltypes.OptionalFloat64{}):            "OPTIONAL float64",
+	reflect.TypeOf(geltypes.OptionalInt16{}):              "OPTIONAL int16",
+	reflect.TypeOf(geltypes.OptionalInt32{}):              "OPTIONAL int32",
+	reflect.TypeOf(geltypes.OptionalInt64{}):              "OPTIONAL int64",
 	reflect.TypeOf(geltypes.OptionalLocalDate{}):          "OPTIONAL local_date",
 	reflect.TypeOf(geltypes.OptionalLocalDateTime{}):      "OPTIONAL local_datetime",
 	reflect.TypeOf(geltypes.OptionalLocalTime{}):          "OPTIONAL local_time",
@@ -276,6 +306,6 @@ var gelTypeMap = map[reflect.Type]string{
 	reflect.TypeOf(geltypes.RangeInt64{}):                 "",
 	reflect.TypeOf(geltypes.RangeLocalDate{}):             "",
 	reflect.TypeOf(geltypes.RangeLocalDateTime{}):         "",
-	reflect.TypeOf(geltypes.RelativeDuration{}):           "",
+	reflect.TypeOf(geltypes.RelativeDuration{}):           "relative_duration",
 	reflect.TypeOf(geltypes.UUID{}):                       "uuid",
 }

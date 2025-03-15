@@ -6,11 +6,9 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-type CharacterSet []Character
-
-func (c CharacterSet) ToProto() []*v1.Character {
-	out := make([]*v1.Character, 0, len(c))
-	for _, ch := range c {
+func CharacterSetToProto(in []Character) []*v1.Character {
+	out := make([]*v1.Character, 0, len(in))
+	for _, ch := range in {
 		out = append(out, ch.ToProto())
 	}
 
@@ -18,15 +16,15 @@ func (c CharacterSet) ToProto() []*v1.Character {
 }
 
 type Character struct {
-	ID              geltypes.UUID         `gel:"id"`
-	Name            geltypes.OptionalStr  `gel:"name"`
-	Description     geltypes.OptionalStr  `gel:"description"`
-	Context         []string              `gel:"context"`
-	Active          bool                  `gel:"active"`
-	MainCharacter   bool                  `gel:"main_character"`
-	Skills          CharacterAttributeSet `gel:"skills"`
-	Characteristics CharacterAttributeSet `gel:"characteristics"`
-	Relationship    CharacterAttributeSet `gel:"relationship"`
+	ID              geltypes.UUID        `gel:"id"`
+	Name            geltypes.OptionalStr `gel:"name"`
+	Description     geltypes.OptionalStr `gel:"description"`
+	Context         []string             `gel:"context"`
+	Active          bool                 `gel:"active"`
+	MainCharacter   bool                 `gel:"main_character"`
+	Skills          []CharacterAttribute `gel:"skills"`
+	Characteristics []CharacterAttribute `gel:"characteristics"`
+	Relationship    []CharacterAttribute `gel:"relationship"`
 }
 
 func (Character) DBType() string {
@@ -83,17 +81,15 @@ func (c *Character) ToProto() *v1.Character {
 		Context:         c.Context,
 		Active:          c.Active,
 		MainCharacter:   c.MainCharacter,
-		Skills:          c.Skills.ToProto(),
-		Characteristics: c.Characteristics.ToProto(),
-		Relationship:    c.Relationship.ToProto(),
+		Skills:          CharacterAttributesToProto(c.Skills),
+		Characteristics: CharacterAttributesToProto(c.Characteristics),
+		Relationship:    CharacterAttributesToProto(c.Relationship),
 	}
 }
 
-type CharacterAttributeSet []CharacterAttribute
-
-func (c CharacterAttributeSet) ToProto() []*v1.CharacterAttribute {
-	out := make([]*v1.CharacterAttribute, 0, len(c))
-	for _, cas := range c {
+func CharacterAttributesToProto(in []CharacterAttribute) []*v1.CharacterAttribute {
+	out := make([]*v1.CharacterAttribute, 0, len(in))
+	for _, cas := range in {
 		out = append(out, cas.ToProto())
 	}
 
@@ -135,7 +131,7 @@ type Game struct {
 	StartingMessage geltypes.OptionalStr `gel:"starting_message"`
 	Scenario        geltypes.OptionalStr `gel:"scenario"`
 	Objectives      geltypes.OptionalStr `gel:"objectives"`
-	Characters      CharacterSet         `gel:"characters"`
+	Characters      []Character          `gel:"characters"`
 
 	Skills          []string `gel:"skills"`
 	Characteristics []string `gel:"characteristics"`
@@ -191,7 +187,7 @@ func (g *Game) ToProto() *v1.Game {
 		StartingMessage:      singleValue(g.StartingMessage.Get),
 		Scenario:             singleValue(g.Scenario.Get),
 		Objectives:           singleValue(g.Objectives.Get),
-		Characters:           g.Characters.ToProto(),
+		Characters:           CharacterSetToProto(g.Characters),
 		Skills:               g.Skills,
 		Characteristics:      g.Characteristics,
 		Relationship:         g.Relationship,

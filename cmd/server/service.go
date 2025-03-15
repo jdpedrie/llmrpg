@@ -50,9 +50,15 @@ func (s *LLMRPCService) CreateGame(
 		return nil, err
 	}
 
+	// 2nd query because nested IDs not returned above.
+	g, err := s.engine.GetGame(ctx, game.ID.String())
+	if err != nil {
+		return nil, err
+	}
+
 	return &connect.Response[v1.CreateGameResponse]{
 		Msg: &v1.CreateGameResponse{
-			Game: game.ToProto(), // why are nested obj ids empty?
+			Game: g.ToProto(),
 		},
 	}, nil
 }
