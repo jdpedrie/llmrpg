@@ -4,11 +4,15 @@ go 1.24.0
 
 require (
 	connectrpc.com/connect v1.18.1
+	connectrpc.com/grpcreflect v1.3.0
 	github.com/awesome-gocui/gocui v1.1.0
 	github.com/charmbracelet/bubbles v0.20.0
 	github.com/charmbracelet/bubbletea v1.3.4
 	github.com/charmbracelet/lipgloss v1.0.0
 	github.com/geldata/gel-go v1.1.0
+	github.com/google/uuid v1.6.0
+	github.com/jackc/pgx/v5 v5.5.5
+	github.com/pgvector/pgvector-go v0.1.1
 	github.com/urfave/cli/v2 v2.27.6
 	github.com/weaviate/weaviate v1.27.0
 	golang.org/x/net v0.29.0
@@ -17,7 +21,6 @@ require (
 )
 
 require (
-	connectrpc.com/grpcreflect v1.3.0 // indirect
 	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
@@ -38,7 +41,9 @@ require (
 	github.com/go-openapi/swag v0.22.3 // indirect
 	github.com/go-openapi/validate v0.21.0 // indirect
 	github.com/google/go-cmp v0.6.0 // indirect
-	github.com/google/uuid v1.6.0 // indirect
+	github.com/jackc/pgpassfile v1.0.0 // indirect
+	github.com/jackc/pgservicefile v0.0.0-20221227161230-091c0ba34f0a // indirect
+	github.com/jackc/puddle/v2 v2.2.1 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect

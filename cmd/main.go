@@ -8,10 +8,9 @@ import (
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/geldata/gel-go"
-	"github.com/geldata/gel-go/gelcfg"
 	"github.com/jdpedrie/llmrpg/cmd/server"
 	"github.com/jdpedrie/llmrpg/game"
+	"github.com/jdpedrie/llmrpg/pkg/postgres"
 	"github.com/urfave/cli/v2"
 )
 
@@ -23,15 +22,14 @@ func main() {
 }
 
 func run(ctx context.Context, logger *slog.Logger) error {
-	client, err := gel.CreateClient(gelcfg.Options{})
+	db, err := postgres.NewFromEnv()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to connect to database: %w", err)
 	}
+	defer db.Close()
 
-	defer client.Close()
-
-	manager := game.NewManager(client)
-	engineFactory := game.NewEngine(client)
+	manager := game.NewManager(db)
+	engineFactory := game.NewEngine(db)
 
 	app := cli.App{
 		Action: func(ctx *cli.Context) error {

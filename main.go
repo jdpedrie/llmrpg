@@ -7,8 +7,7 @@ import (
 	"os"
 
 	"github.com/awesome-gocui/gocui"
-	"github.com/geldata/gel-go"
-	"github.com/geldata/gel-go/gelcfg"
+	"github.com/jdpedrie/llmrpg/pkg/postgres"
 	"github.com/urfave/cli/v2"
 )
 
@@ -19,11 +18,11 @@ func main() {
 }
 
 func run(ctx context.Context) error {
-	client, err := gel.CreateClient(gelcfg.Options{})
+	db, err := postgres.NewFromEnv()
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer client.Close()
+	defer db.Close()
 
 	g, err := gocui.NewGui(gocui.OutputNormal, true)
 	if err != nil {

@@ -8,71 +8,73 @@ option features.field_presence = IMPLICIT;
 option go_package = "github.com/jdpedrie/llmrpg/genproto/jdpedrie/llmrpg/v1";
 
 service LLMRPGService {
-    rpc StartGame(StartGameRequest) returns (StartGameResponse);
-
-    rpc CreateGame(CreateGameRequest) returns (CreateGameResponse);
+  rpc Play(stream PlayRequest) returns (stream PlayResponse);
 }
 
-message StartGameRequest {
-    string template_id = 1;
+message PlayRequest {
+  string game_id = 1;
+  string choice = 2;
+  string outcome = 3;
 }
 
-message StartGameResponse {
-    string game_id = 1;
-}
+message PlayResponse {
+  Game game = 1;
 
-message CreateGameRequest {
-    Game game = 1;
-}
-
-message CreateGameResponse {
-    Game game = 1;
+  string message = 2;
 }
 
 message Game {
-    string id = 1;
-    string name = 2;
-    string description = 3;
-    repeated Character characters = 4;
-    string starting_message = 5;
-    string scenario = 6;
-    string objectives = 7;
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  repeated Character characters = 4;
+  string starting_message = 5;
+  string scenario = 6;
+  string objectives = 7;
+  repeated InventoryItem inventory = 8;
 
-    repeated string skills = 8;
-    repeated string characteristics = 9;
-    repeated string relationship = 10; // protolint:disable:this REPEATED_FIELD_NAMES_PLURALIZED
+  repeated string skills = 9;
+  repeated string characteristics = 10;
+  repeated string relationship = 11;
 
-    bool is_template = 11;
-    bool is_running = 12;
+  bool is_template = 12;
+  bool is_running = 13;
 
-    google.protobuf.Timestamp playthrough_start_time = 13;
-    google.protobuf.Timestamp playthrough_end_time = 14;
-    google.protobuf.Timestamp last_activity_time = 15;
-    google.protobuf.Timestamp create_time = 16;
+  google.protobuf.Timestamp playthrough_start_time = 14;
+  google.protobuf.Timestamp playthrough_end_time = 15;
+  google.protobuf.Timestamp last_activity_time = 16;
+  google.protobuf.Timestamp create_time = 17;
 }
 
 message Character {
-    string id = 1;
-    string name = 2;
-    string description = 3;
-    repeated string context = 4; // protolint:disable:this REPEATED_FIELD_NAMES_PLURALIZED
-    bool active = 5;
-    bool main_character = 6;
-    repeated CharacterAttribute skills = 7;
-    repeated CharacterAttribute characteristics = 8;
-    repeated CharacterAttribute relationship = 9; // protolint:disable:this REPEATED_FIELD_NAMES_PLURALIZED
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  repeated string context = 4;
+  bool active = 5;
+  bool main_character = 6;
+  repeated CharacterAttribute skills = 7;
+  repeated CharacterAttribute characteristics = 8;
+  repeated CharacterAttribute relationship = 9;
 }
 
 message CharacterAttribute {
-    string id = 1;
-    string name = 2;
-    int32 value = 3;
+  string id = 1;
+  string name = 2;
+  int32 value = 3;
 }
 
 message History {
-    string id = 1;
-    string game_id = 2;
-    string text = 3;
-    string choice = 4;
-    string outcome = 5;
+  string id = 1;
+  string game_id = 2;
+  string text = 3;
+  string choice = 4;
+  string outcome = 5;
+}
+
+message InventoryItem {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  bool active = 4;
 }

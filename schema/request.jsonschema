@@ -1,0 +1,187 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "Game LLM Request Schema",
+    "type": "object",
+    "properties": {
+      "characters": {
+        "description": "A list of known game characters and information about them.",
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid",
+              "description": "The unique ID of the character. This should never change."
+            },
+            "name": {
+              "type": "string",
+              "description": "The name of the character. This can change (e.g. from 'tall man' to 'Bill')"
+            },
+            "description": {
+              "type": "string",
+              "description": "A short description of the character. This can change."
+            },
+            "context": {
+              "type": "array",
+              "description": "Character background, or important things which have happened to the character",
+              "items": {
+                "type": "string"
+              }
+            },
+            "main_character": {
+              "type": "boolean",
+              "description": "The game's main character. Represented by the player. Only one per game, can never be changed."
+            },
+            "stats": {
+              "type": "array",
+              "description": "Strengths and weaknesses of the character. Their skills.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "value": {
+                    "type": "integer"
+                  }
+                },
+                "required": ["id", "name", "value"]
+              }
+            },
+            "characteristics": {
+              "type": "array",
+              "description": "The character's character. Goodness, badness, etc",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "value": {
+                    "type": "integer"
+                  }
+                },
+                "required": ["id", "name", "value"]
+              }
+            },
+            "relationship": {
+              "type": "array",
+              "description": "The non-playable character's orientation towards the main character.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "value": {
+                    "type": "integer"
+                  }
+                },
+                "required": ["id", "name", "value"]
+              }
+            }
+          },
+          "required": ["id", "name", "description", "context", "main_character", "stats", "characteristics", "relationship"]
+        }
+      },
+      "inventory": {
+        "type": "array",
+        "description": "items carried by the main character, and usable. Other items can be found in the environment and used or added to the inventory for later.",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "name": {
+              "type": "string"
+            },
+            "description": {
+              "type": "string"
+            },
+            "active": {
+                "description": "if false, cannot be used. broken, disabled, etc.",
+              "type": "boolean"
+            }
+          },
+          "required": ["id", "name", "description", "active"]
+        }
+      },
+      "action": {
+        "description": "The action taken by the player",
+        "type": "object",
+        "properties": {
+          "choice": {
+            "description": "the text of their choice",
+            "type": "string"
+          },
+          "outcome": {
+            "description": "whether the action succeeded",
+            "type": "string",
+            "enum": ["success", "partial-success", "failure"]
+          }
+        },
+        "required": ["choice", "outcome"]
+      },
+      "history": {
+        "description": "a list of recent actions and their outcome",
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "choice": {
+              "type": "string"
+            },
+            "outcome": {
+              "type": "string",
+              "enum": ["success", "partial-success", "failure"]
+            }
+          },
+          "required": ["choice", "outcome"]
+        }
+      },
+      "context": {
+        "description": "historical data used to provide factual grounding for generation of game messages",
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "history_context": {
+        "description": "semantically retrieved context based on questions about the game state",
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "question": {
+              "type": "string",
+              "description": "The question asked to retrieve relevant context"
+            },
+            "answers": {
+              "type": "array",
+              "description": "The retrieved context information that answers the question",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": ["question", "answers"]
+        }
+      }
+    },
+    "required": ["characters", "inventory", "action", "history", "context"]
+  }

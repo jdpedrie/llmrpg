@@ -1,0 +1,140 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Game LLM Response Schema",
+  "description": "Schema for the response received from an LLM-based RPG engine.",
+  "type": "object",
+  "properties": {
+    "message": {
+      "type": "string",
+      "description": "A narrative message from the LLM, describing the outcome of the last action and the current sitation."
+    },
+    "choices": {
+      "type": "array",
+      "description": "An array of choices the player can make for the next action.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "The text of the available choice the player can select."
+          },
+          "probability": {
+            "type": "string",
+            "enum": ["none", "very_low", "low", "medium", "high", "very_high", "guaranteed"],
+            "description": "The likelihood of success for this choice."
+          },
+          "context": {
+            "type": "string",
+            "description": "A short context description relevant to this choice."
+          }
+        },
+        "required": ["text", "probability", "context"]
+      }
+    },
+    "character_changes": {
+      "type": "array",
+      "description": "A list of character updates affecting their basic information, memory, relationships, or state.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The unique identifier of the affected character."
+          },
+          "field": {
+            "type": "string",
+            "enum": ["name", "description", "context", "active"],
+            "description": "The character field being modified."
+          },
+          "value": {
+            "oneOf": [
+              {
+                "type": "string",
+                "description": "If 'field' is 'name' or 'description', this should be a string."
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "If 'field' is 'context', this should be an array of strings."
+              },
+              {
+                "type": "boolean",
+                "description": "If 'field' is 'active', this should be a boolean."
+              }
+            ],
+            "description": "The new value for the field, varying based on its type."
+          }
+        },
+        "required": ["id", "field", "value"]
+      }
+    },
+    "attribute_changes": {
+      "type": "array",
+      "description": "Changes to character attributes such as stats, morality, or other quantified characteristics.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The unique identifier of the affected character."
+          },
+          "delta": {
+            "type": "integer",
+            "description": "The numerical change applied to a character's attribute (e.g., +1 for strength, -2 for charisma)."
+          }
+        },
+        "required": ["id", "delta"]
+      }
+    },
+    "inventory_changes": {
+      "type": "array",
+      "description": "Modifications to the player's inventory, such as activating or modifying items.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The unique identifier of the affected inventory item."
+          },
+          "active": {
+            "type": "boolean",
+            "description": "Indicates whether the item is currently active or equipped.",
+            "default": false
+          },
+          "description": {
+            "type": "string",
+            "description": "An updated description of the item, reflecting changes in condition or appearance."
+          }
+        },
+        "required": ["id"]
+      }
+    },
+    "context_queries": {
+      "type": "array",
+      "description": "A list of context-relevant queries used to fetch additional information from memory storage.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "questions": {
+      "type": "array",
+      "description": "Questions the game master has about characters, objects, or any game history which would be helpful in formulating the next response.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "new_contexts": {
+      "type": "array",
+      "description": "New context entries that should be stored for later retrieval, containing important events, facts, or information about the game state.",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": ["message", "choices", "character_changes", "attribute_changes", "inventory_changes", "context_queries", "questions", "new_contexts"]
+}

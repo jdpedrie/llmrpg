@@ -5,11 +5,12 @@ import (
 	"errors"
 
 	"connectrpc.com/connect"
+	"github.com/google/uuid"
 	"github.com/jdpedrie/llmrpg/game"
 	v1 "github.com/jdpedrie/llmrpg/genproto/jdpedrie/llmrpg/v1"
 	"github.com/jdpedrie/llmrpg/genproto/jdpedrie/llmrpg/v1/v1connect"
 	"github.com/jdpedrie/llmrpg/model"
-	"github.com/jdpedrie/llmrpg/pkg/db"
+	"github.com/jdpedrie/llmrpg/pkg/postgres"
 )
 
 type LLMRPCService struct {
@@ -42,7 +43,7 @@ func (s *LLMRPCService) CreateGame(
 		return nil, err
 	}
 
-	if !db.UUIDEmpty(game.ID) {
+	if !postgres.IsUUIDEmpty(game.ID) {
 		return nil, errors.New("game id must be empty")
 	}
 
