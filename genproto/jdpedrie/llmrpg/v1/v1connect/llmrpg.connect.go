@@ -33,17 +33,13 @@ const (
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// LLMRPGServiceStartGameProcedure is the fully-qualified name of the LLMRPGService's StartGame RPC.
-	LLMRPGServiceStartGameProcedure = "/v1.LLMRPGService/StartGame"
-	// LLMRPGServiceCreateGameProcedure is the fully-qualified name of the LLMRPGService's CreateGame
-	// RPC.
-	LLMRPGServiceCreateGameProcedure = "/v1.LLMRPGService/CreateGame"
+	// LLMRPGServicePlayProcedure is the fully-qualified name of the LLMRPGService's Play RPC.
+	LLMRPGServicePlayProcedure = "/v1.LLMRPGService/Play"
 )
 
 // LLMRPGServiceClient is a client for the v1.LLMRPGService service.
 type LLMRPGServiceClient interface {
-	StartGame(context.Context, *connect.Request[v1.StartGameRequest]) (*connect.Response[v1.StartGameResponse], error)
-	CreateGame(context.Context, *connect.Request[v1.CreateGameRequest]) (*connect.Response[v1.CreateGameResponse], error)
+	Play(context.Context) *connect.BidiStreamForClient[v1.PlayRequest, v1.PlayResponse]
 }
 
 // NewLLMRPGServiceClient constructs a client for the v1.LLMRPGService service. By default, it uses
@@ -57,16 +53,10 @@ func NewLLMRPGServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 	baseURL = strings.TrimRight(baseURL, "/")
 	lLMRPGServiceMethods := v1.File_jdpedrie_llmrpg_v1_llmrpg_proto.Services().ByName("LLMRPGService").Methods()
 	return &lLMRPGServiceClient{
-		startGame: connect.NewClient[v1.StartGameRequest, v1.StartGameResponse](
+		play: connect.NewClient[v1.PlayRequest, v1.PlayResponse](
 			httpClient,
-			baseURL+LLMRPGServiceStartGameProcedure,
-			connect.WithSchema(lLMRPGServiceMethods.ByName("StartGame")),
-			connect.WithClientOptions(opts...),
-		),
-		createGame: connect.NewClient[v1.CreateGameRequest, v1.CreateGameResponse](
-			httpClient,
-			baseURL+LLMRPGServiceCreateGameProcedure,
-			connect.WithSchema(lLMRPGServiceMethods.ByName("CreateGame")),
+			baseURL+LLMRPGServicePlayProcedure,
+			connect.WithSchema(lLMRPGServiceMethods.ByName("Play")),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -74,24 +64,17 @@ func NewLLMRPGServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 
 // lLMRPGServiceClient implements LLMRPGServiceClient.
 type lLMRPGServiceClient struct {
-	startGame  *connect.Client[v1.StartGameRequest, v1.StartGameResponse]
-	createGame *connect.Client[v1.CreateGameRequest, v1.CreateGameResponse]
+	play *connect.Client[v1.PlayRequest, v1.PlayResponse]
 }
 
-// StartGame calls v1.LLMRPGService.StartGame.
-func (c *lLMRPGServiceClient) StartGame(ctx context.Context, req *connect.Request[v1.StartGameRequest]) (*connect.Response[v1.StartGameResponse], error) {
-	return c.startGame.CallUnary(ctx, req)
-}
-
-// CreateGame calls v1.LLMRPGService.CreateGame.
-func (c *lLMRPGServiceClient) CreateGame(ctx context.Context, req *connect.Request[v1.CreateGameRequest]) (*connect.Response[v1.CreateGameResponse], error) {
-	return c.createGame.CallUnary(ctx, req)
+// Play calls v1.LLMRPGService.Play.
+func (c *lLMRPGServiceClient) Play(ctx context.Context) *connect.BidiStreamForClient[v1.PlayRequest, v1.PlayResponse] {
+	return c.play.CallBidiStream(ctx)
 }
 
 // LLMRPGServiceHandler is an implementation of the v1.LLMRPGService service.
 type LLMRPGServiceHandler interface {
-	StartGame(context.Context, *connect.Request[v1.StartGameRequest]) (*connect.Response[v1.StartGameResponse], error)
-	CreateGame(context.Context, *connect.Request[v1.CreateGameRequest]) (*connect.Response[v1.CreateGameResponse], error)
+	Play(context.Context, *connect.BidiStream[v1.PlayRequest, v1.PlayResponse]) error
 }
 
 // NewLLMRPGServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -101,24 +84,16 @@ type LLMRPGServiceHandler interface {
 // and JSON codecs. They also support gzip compression.
 func NewLLMRPGServiceHandler(svc LLMRPGServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
 	lLMRPGServiceMethods := v1.File_jdpedrie_llmrpg_v1_llmrpg_proto.Services().ByName("LLMRPGService").Methods()
-	lLMRPGServiceStartGameHandler := connect.NewUnaryHandler(
-		LLMRPGServiceStartGameProcedure,
-		svc.StartGame,
-		connect.WithSchema(lLMRPGServiceMethods.ByName("StartGame")),
-		connect.WithHandlerOptions(opts...),
-	)
-	lLMRPGServiceCreateGameHandler := connect.NewUnaryHandler(
-		LLMRPGServiceCreateGameProcedure,
-		svc.CreateGame,
-		connect.WithSchema(lLMRPGServiceMethods.ByName("CreateGame")),
+	lLMRPGServicePlayHandler := connect.NewBidiStreamHandler(
+		LLMRPGServicePlayProcedure,
+		svc.Play,
+		connect.WithSchema(lLMRPGServiceMethods.ByName("Play")),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/v1.LLMRPGService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case LLMRPGServiceStartGameProcedure:
-			lLMRPGServiceStartGameHandler.ServeHTTP(w, r)
-		case LLMRPGServiceCreateGameProcedure:
-			lLMRPGServiceCreateGameHandler.ServeHTTP(w, r)
+		case LLMRPGServicePlayProcedure:
+			lLMRPGServicePlayHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -128,10 +103,6 @@ func NewLLMRPGServiceHandler(svc LLMRPGServiceHandler, opts ...connect.HandlerOp
 // UnimplementedLLMRPGServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedLLMRPGServiceHandler struct{}
 
-func (UnimplementedLLMRPGServiceHandler) StartGame(context.Context, *connect.Request[v1.StartGameRequest]) (*connect.Response[v1.StartGameResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("v1.LLMRPGService.StartGame is not implemented"))
-}
-
-func (UnimplementedLLMRPGServiceHandler) CreateGame(context.Context, *connect.Request[v1.CreateGameRequest]) (*connect.Response[v1.CreateGameResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("v1.LLMRPGService.CreateGame is not implemented"))
+func (UnimplementedLLMRPGServiceHandler) Play(context.Context, *connect.BidiStream[v1.PlayRequest, v1.PlayResponse]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("v1.LLMRPGService.Play is not implemented"))
 }

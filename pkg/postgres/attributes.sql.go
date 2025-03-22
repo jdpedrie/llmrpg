@@ -12,30 +12,40 @@ import (
 )
 
 const CreateCharacterAttribute = `-- name: CreateCharacterAttribute :one
-INSERT INTO character_attributes (
-  name, value, attribute_type
-) VALUES (
-  $1, $2, $3
+WITH inserted AS (
+  INSERT INTO character_attributes (name, value, attribute_type)
+  VALUES ($1, $2, $4)
+  RETURNING id, name, value, attribute_type, created_at, updated_at
 )
-RETURNING id, name, value, attribute_type, created_at, updated_at
+INSERT INTO character_to_attributes (character_id, attribute_id, relationship_type)
+SELECT
+  $3::uuid,
+  inserted.id,
+  $4
+FROM inserted
+RETURNING character_id, attribute_id, relationship_type, created_at
 `
 
 type CreateCharacterAttributeParams struct {
-	Name          string `json:"name"`
-	Value         int16  `json:"value"`
-	AttributeType string `json:"attribute_type"`
+	Name          string    `json:"name"`
+	Value         int16     `json:"value"`
+	CharacterID   uuid.UUID `json:"character_id"`
+	AttributeType string    `json:"attribute_type"`
 }
 
-func (q *Queries) CreateCharacterAttribute(ctx context.Context, arg CreateCharacterAttributeParams) (CharacterAttribute, error) {
-	row := q.db.QueryRow(ctx, CreateCharacterAttribute, arg.Name, arg.Value, arg.AttributeType)
-	var i CharacterAttribute
+func (q *Queries) CreateCharacterAttribute(ctx context.Context, arg CreateCharacterAttributeParams) (CharacterToAttribute, error) {
+	row := q.db.QueryRow(ctx, CreateCharacterAttribute,
+		arg.Name,
+		arg.Value,
+		arg.CharacterID,
+		arg.AttributeType,
+	)
+	var i CharacterToAttribute
 	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.Value,
-		&i.AttributeType,
+		&i.CharacterID,
+		&i.AttributeID,
+		&i.RelationshipType,
 		&i.CreatedAt,
-		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -144,7 +154,7 @@ func (q *Queries) UnlinkCharacterAttribute(ctx context.Context, arg UnlinkCharac
 
 const UpdateCharacterAttribute = `-- name: UpdateCharacterAttribute :one
 UPDATE character_attributes
-SET 
+SET
   name = $2,
   value = $3,
   attribute_type = $4

@@ -2,191 +2,285 @@ package game
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jdpedrie/llmrpg/model"
 	"github.com/jdpedrie/llmrpg/pkg/postgres"
 )
 
-// Engine manages game engine functionality
+// Engine handles game mechanics and state management
 type Engine struct {
-	db *postgres.DB
+	pool      *pgxpool.Pool
+	queries   *postgres.Queries
+	llmClient LLMClient
+	gm        *GameMaster
 }
 
 // NewEngine creates a new game engine
-func NewEngine(db *postgres.DB) *Engine {
-	return &Engine{
-		db: db,
+func NewEngine(pool *pgxpool.Pool, queries *postgres.Queries, llmClient LLMClient) *Engine {
+	engine := &Engine{
+		pool:      pool,
+		queries:   queries,
+		llmClient: llmClient,
 	}
+
+	engine.gm = NewGameMaster(engine, llmClient)
+	return engine
 }
 
-// StartGame creates a new game instance from a template
-func (e *Engine) StartGame(ctx context.Context, templateID string) (*GameEngine, error) {
-	gameID, err := uuid.Parse(templateID)
+// CreateGame creates a new game template
+func (e *Engine) CreateGame(ctx context.Context, game *model.Game) error {
+	conn, err := e.pool.Acquire(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("invalid template ID: %w", err)
+		return err
 	}
 
-	// Retrieve template game
-	var tpl *model.Game
-	manager := NewManager(e.db)
-	tpl, err = manager.GetGame(ctx, gameID.String())
+	defer conn.Release()
+
+	tx, err := conn.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
-		return nil, fmt.Errorf("error getting template game: %w", err)
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	qtx := e.queries.WithTx(tx)
+
+	// Create the game
+	gameParams := postgres.CreateGameParams{
+		Name:            game.Name,
+		Description:     postgres.NewText(game.Description),
+		StartingMessage: postgres.NewText(game.StartingMessage),
+		Scenario:        postgres.NewText(game.Scenario),
+		Objectives:      postgres.NewText(game.Objectives),
+		Skills:          game.Skills,
+		Characteristics: game.Characteristics,
+		Relationship:    game.Relationship,
+		IsTemplate:      game.IsTemplate,
+		IsRunning:       game.IsRunning,
 	}
 
-	if !tpl.IsTemplate {
-		return nil, fmt.Errorf("game %s is not a template", templateID)
+	pgGame, err := qtx.CreateGame(ctx, gameParams)
+	if err != nil {
+		return err
 	}
 
-	// Make a copy of the template with IsTemplate=false and IsRunning=true
-	tpl.ID = uuid.New() // Generate a new ID for the game instance
-	tpl.IsTemplate = false
-	tpl.IsRunning = true
+	game.ID = pgGame.ID
 
-	// Reset IDs for all entities to ensure new instances are created
-	for i := range tpl.Characters {
-		tpl.Characters[i].ID = uuid.New()
-		
-		for j := range tpl.Characters[i].Skills {
-			tpl.Characters[i].Skills[j].ID = uuid.New()
+	// Create characters
+	for i := range game.Characters {
+		char := &game.Characters[i]
+		charParams := postgres.CreateCharacterParams{
+			GameID:        game.ID,
+			Name:          char.Name,
+			Description:   postgres.NewText(char.Description),
+			Context:       char.Context,
+			Active:        char.Active,
+			MainCharacter: char.MainCharacter,
 		}
-		
-		for j := range tpl.Characters[i].Characteristics {
-			tpl.Characters[i].Characteristics[j].ID = uuid.New()
-		}
-		
-		for j := range tpl.Characters[i].Relationship {
-			tpl.Characters[i].Relationship[j].ID = uuid.New()
-		}
-	}
 
-	for i := range tpl.Inventory {
-		tpl.Inventory[i].ID = uuid.New()
-	}
-
-	// Use a transaction for creating the new game
-	err = e.db.WithTx(ctx, func(q *postgres.Queries) error {
-		// Create the game first
-		dbGame, err := q.CreateGame(ctx, postgres.CreateGameParams{
-			Name:            tpl.Name,
-			Description:     postgres.NewText(tpl.Description),
-			StartingMessage: postgres.NewText(tpl.StartingMessage),
-			Scenario:        postgres.NewText(tpl.Scenario),
-			Objectives:      postgres.NewText(tpl.Objectives),
-			Skills:          tpl.Skills,
-			Characteristics: tpl.Characteristics,
-			Relationship:    tpl.Relationship,
-			IsTemplate:      false,
-			IsRunning:       true,
-		})
+		pgCharacter, err := qtx.CreateCharacter(ctx, charParams)
 		if err != nil {
-			return fmt.Errorf("error creating game from template: %w", err)
+			return err
 		}
 
-		tpl.ID = dbGame.ID
-		
-		// Create characters and attributes
-		for i := range tpl.Characters {
-			char := &tpl.Characters[i]
-			dbChar, err := q.CreateCharacter(ctx, postgres.CreateCharacterParams{
-				Name:          char.Name,
-				Description:   postgres.NewText(char.Description),
-				Context:       char.Context,
-				Active:        char.Active,
-				MainCharacter: char.MainCharacter,
-				GameID:        gameID{ID: tpl.ID, Valid: true},
-			})
-			if err != nil {
-				return fmt.Errorf("error creating character: %w", err)
-			}
+		char.ID = pgCharacter.ID
 
-			char.ID = dbChar.ID
-
+		for k, v := range map[string][]model.CharacterAttribute{
+			"skill":          char.Skills,
+			"characteristic": char.Characteristics,
+			"relationship":   char.Relationship,
+		} {
 			// Create character attributes
-			if err := createCharacterAttributes(ctx, q, char); err != nil {
-				return err
+			for _, attr := range v {
+				attrParams := postgres.CreateCharacterAttributeParams{
+					CharacterID:   pgCharacter.ID,
+					AttributeType: k,
+					Name:          attr.Name,
+					Value:         attr.Value,
+				}
+
+				_, err := qtx.CreateCharacterAttribute(ctx, attrParams)
+				if err != nil {
+					return err
+				}
 			}
 		}
+	}
 
-		// Create inventory items
-		for i := range tpl.Inventory {
-			item := &tpl.Inventory[i]
-			dbItem, err := q.CreateInventoryItem(ctx, postgres.CreateInventoryItemParams{
-				Name:        item.Name,
-				Description: item.Description,
-				Active:      item.Active,
-				GameID:      tpl.ID,
-			})
-			if err != nil {
-				return fmt.Errorf("error creating inventory item: %w", err)
-			}
-
-			item.ID = dbItem.ID
-			item.GameID = dbItem.GameID
+	// Create inventory items
+	for i := range game.Inventory {
+		item := &game.Inventory[i]
+		itemParams := postgres.CreateInventoryItemParams{
+			GameID:      game.ID,
+			Name:        item.Name,
+			Description: item.Description,
+			Active:      item.Active,
 		}
 
-		// Update the game to set the playthrough_start_time
-		_, err = q.StartGame(ctx, tpl.ID)
+		pgItem, err := qtx.CreateInventoryItem(ctx, itemParams)
 		if err != nil {
-			return fmt.Errorf("error starting game: %w", err)
+			return err
 		}
 
-		return nil
-	})
+		item.ID = pgItem.ID
+	}
 
+	return tx.Commit(ctx)
+}
+
+// GetGame returns a game by ID
+func (e *Engine) GetGame(ctx context.Context, gameID string) (*model.Game, error) {
+	gID, err := uuid.Parse(gameID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid game ID: %w", err)
+	}
+
+	conn, err := e.pool.Acquire(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	return &GameEngine{
-		db:     e.db,
-		gameID: tpl.ID.String(),
-	}, nil
+	defer conn.Release()
+
+	tx, err := conn.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	qtx := e.queries.WithTx(tx)
+
+	// Get the game
+	dbGame, err := qtx.GetGame(ctx, gID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get characters
+	dbCharacters, err := qtx.GetGameCharacters(ctx, gID)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, err
+	}
+
+	characters := make([]model.Character, 0, len(dbCharacters))
+	for _, dbChar := range dbCharacters {
+		// Get character attributes
+		skills, err := qtx.GetCharacterAttributesByType(ctx, postgres.GetCharacterAttributesByTypeParams{
+			CharacterID:   dbChar.ID,
+			AttributeType: "skill",
+		})
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return nil, err
+		}
+
+		characteristics, err := qtx.GetCharacterAttributesByType(ctx, postgres.GetCharacterAttributesByTypeParams{
+			CharacterID:   dbChar.ID,
+			AttributeType: "characteristic",
+		})
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return nil, err
+		}
+
+		relationships, err := qtx.GetCharacterAttributesByType(ctx, postgres.GetCharacterAttributesByTypeParams{
+			CharacterID:   dbChar.ID,
+			AttributeType: "relationship",
+		})
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return nil, err
+		}
+
+		character := model.FromDBCharacter(dbChar, skills, characteristics, relationships)
+		characters = append(characters, character)
+	}
+
+	// Get inventory items
+	dbItems, err := qtx.GetGameInventory(ctx, gID)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, err
+	}
+
+	items := make([]model.InventoryItem, 0, len(dbItems))
+	for _, dbItem := range dbItems {
+		items = append(items, model.FromDBInventoryItem(dbItem))
+	}
+
+	// Create the model game
+	game := model.FromDBGame(dbGame, characters, items)
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+
+	return &game, nil
 }
 
-// CreateGame creates a new game
-func (e *Engine) CreateGame(ctx context.Context, game *model.Game) error {
-	manager := NewManager(e.db)
-	return manager.CreateGame(ctx, game)
-}
+// ReceiveAction processes a player action and returns streaming results
+func (e *Engine) ReceiveAction(ctx context.Context, gameID string, action *model.Action, resultChan chan<- *model.ActionResult) error {
+	defer close(resultChan)
 
-// GetGame retrieves a game by ID
-func (e *Engine) GetGame(ctx context.Context, id string) (*model.Game, error) {
-	manager := NewManager(e.db)
-	return manager.GetGame(ctx, id)
-}
+	gID, err := uuid.Parse(gameID)
+	if err != nil {
+		return fmt.Errorf("invalid game ID: %w", err)
+	}
 
-// GameEngine represents an active game instance
-type GameEngine struct {
-	db     *postgres.DB
-	gameID string
-}
+	conn, err := e.pool.Acquire(ctx)
+	if err != nil {
+		return err
+	}
 
-// GameID returns the ID of the active game
-func (g *GameEngine) GameID() string {
-	return g.gameID
-}
+	defer conn.Release()
 
-// CurrentState returns the current state of the game
-func (e *Engine) CurrentState(ctx context.Context) (any, error) {
-	return nil, nil
-}
+	tx, err := conn.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
 
-// Action processes a player action
-func (e *GameEngine) Action(ctx context.Context, action PlayerAction) (<-chan any, error) {
-	return nil, nil
-}
+	qtx := e.queries.WithTx(tx)
 
-// PlayerAction represents a player's action in the game
-type PlayerAction struct {
-	Choice  string
-	Success string
-}
+	// Process the action through the game master
+	responseChan := make(chan string)
+	finalChan := make(chan bool)
+	errorChan := make(chan error, 1)
 
-// ActionResult represents the result of a player action
-type ActionResult struct {
-	Message string
-	Game    *model.Game
+	go func() {
+		err := e.gm.ProcessAction(ctx, qtx, gID, action.Choice, action.Outcome, responseChan, finalChan)
+		errorChan <- err
+	}()
+
+	// Stream responses back to the caller
+	for {
+		select {
+		case message, ok := <-responseChan:
+			if !ok {
+				// Channel closed
+				return nil
+			}
+
+			final := <-finalChan
+			resultChan <- &model.ActionResult{
+				Message: message,
+				Final:   final,
+			}
+
+		case err := <-errorChan:
+			if err != nil {
+				return err
+			}
+
+			if err := tx.Commit(ctx); err != nil {
+				return err
+			}
+
+			return nil
+
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
 }

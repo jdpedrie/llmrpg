@@ -18,7 +18,7 @@ func Serve(logger *slog.Logger, manager *game.Manager, engine *game.Engine) cli.
 	return func(ctx *cli.Context) error {
 		logger = logger.With("port", ctx.Int("port"))
 
-		svc := LLMRPCService{
+		svc := &LLMRPCService{
 			manager: manager,
 			engine:  engine,
 		}
@@ -26,7 +26,7 @@ func Serve(logger *slog.Logger, manager *game.Manager, engine *game.Engine) cli.
 		mux := http.NewServeMux()
 
 		r := grpcreflect.NewStaticReflector(v1connect.LLMRPGServiceName)
-		mux.Handle(v1connect.NewLLMRPGServiceHandler(&svc))
+		mux.Handle(v1connect.NewLLMRPGServiceHandler(svc))
 		mux.Handle(grpcreflect.NewHandlerV1(r))
 		mux.Handle(grpcreflect.NewHandlerV1Alpha(r))
 

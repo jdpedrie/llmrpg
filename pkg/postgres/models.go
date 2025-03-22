@@ -38,6 +38,14 @@ type CharacterToAttribute struct {
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 }
 
+type ContextQuery struct {
+	ID        uuid.UUID          `json:"id"`
+	GameID    uuid.UUID          `json:"game_id"`
+	Query     string             `json:"query"`
+	Used      bool               `json:"used"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
 type Game struct {
 	ID                   uuid.UUID          `json:"id"`
 	Name                 string             `json:"name"`

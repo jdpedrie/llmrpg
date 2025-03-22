@@ -7,6 +7,11 @@ SELECT * FROM games
 ORDER BY created_at DESC
 LIMIT $1 OFFSET $2;
 
+-- name: ListActiveGames :many
+SELECT * FROM games WHERE is_running = true
+ORDER BY created_at DESC
+LIMIT $1 OFFSET $2;
+
 -- name: ListGameTemplates :many
 SELECT * FROM games
 WHERE is_template = true
@@ -24,7 +29,7 @@ RETURNING *;
 
 -- name: UpdateGame :one
 UPDATE games
-SET 
+SET
   name = $2,
   description = $3,
   starting_message = $4,
@@ -41,7 +46,7 @@ RETURNING *;
 
 -- name: StartGame :one
 UPDATE games
-SET 
+SET
   is_running = true,
   is_template = false,
   playthrough_start_time = NOW(),
@@ -51,7 +56,7 @@ RETURNING *;
 
 -- name: EndGame :one
 UPDATE games
-SET 
+SET
   is_running = false,
   playthrough_end_time = NOW(),
   last_activity_time = NOW()

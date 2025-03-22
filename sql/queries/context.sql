@@ -9,9 +9,9 @@ ORDER BY created_at DESC;
 
 -- name: CreateGameContext :one
 INSERT INTO game_contexts (
-  game_id, content
+  game_id, content, embedding
 ) VALUES (
-  $1, $2
+  $1, $2, $3
 )
 RETURNING *;
 

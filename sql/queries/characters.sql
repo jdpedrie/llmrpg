@@ -11,13 +11,13 @@ ORDER BY name ASC;
 INSERT INTO characters (
   name, description, context, active, main_character, game_id
 ) VALUES (
-  $1, $2, $3, $4, $5, $6
+  $1, $2, $3, $4, $5, sqlc.arg(game_id)::uuid
 )
 RETURNING *;
 
 -- name: UpdateCharacter :one
 UPDATE characters
-SET 
+SET
   name = $2,
   description = $3,
   context = $4,

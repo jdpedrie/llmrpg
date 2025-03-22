@@ -1,11 +1,16 @@
 package postgres
 
 import (
+	"context"
 	"database/sql"
+	"fmt"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // NewNullString creates a new sql.NullString from a string
@@ -90,4 +95,64 @@ func TimestamptzFromTime(t *time.Time) pgtype.Timestamptz {
 		Time:  *t,
 		Valid: true,
 	}
+}
+
+// NewFromEnv creates a new PostgreSQL connection pool from environment variables
+func NewFromEnv() (*pgxpool.Pool, error) {
+	// Use standard PostgreSQL environment variables like PGHOST, PGPORT, etc.
+	connString := os.Getenv("DATABASE_URL")
+	if connString == "" {
+		var connVars []string
+		
+		// Build connection string from individual environment variables
+		if host := os.Getenv("PGHOST"); host != "" {
+			connVars = append(connVars, fmt.Sprintf("host=%s", host))
+		}
+		
+		if port := os.Getenv("PGPORT"); port != "" {
+			connVars = append(connVars, fmt.Sprintf("port=%s", port))
+		}
+		
+		if user := os.Getenv("PGUSER"); user != "" {
+			connVars = append(connVars, fmt.Sprintf("user=%s", user))
+		}
+		
+		if password := os.Getenv("PGPASSWORD"); password != "" {
+			connVars = append(connVars, fmt.Sprintf("password=%s", password))
+		}
+		
+		if dbname := os.Getenv("PGDATABASE"); dbname != "" {
+			connVars = append(connVars, fmt.Sprintf("dbname=%s", dbname))
+		} else {
+			connVars = append(connVars, "dbname=llmrpg")
+		}
+		
+		// Default settings for SSL mode and connection timeout
+		connVars = append(connVars, "sslmode=disable")
+		connVars = append(connVars, "connect_timeout=10")
+		
+		connString = strings.Join(connVars, " ")
+	}
+	
+	// Create the connection pool
+	config, err := pgxpool.ParseConfig(connString)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing postgres connection string: %w", err)
+	}
+	
+	// Set pool configuration
+	config.MaxConns = 10
+	
+	// Create the pool
+	pool, err := pgxpool.NewWithConfig(context.Background(), config)
+	if err != nil {
+		return nil, fmt.Errorf("error connecting to postgres: %w", err)
+	}
+	
+	// Ping the database to verify connection
+	if err := pool.Ping(context.Background()); err != nil {
+		return nil, fmt.Errorf("error pinging postgres: %w", err)
+	}
+	
+	return pool, nil
 }

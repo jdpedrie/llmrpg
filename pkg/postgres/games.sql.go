@@ -83,7 +83,7 @@ func (q *Queries) DeleteGame(ctx context.Context, id uuid.UUID) error {
 
 const EndGame = `-- name: EndGame :one
 UPDATE games
-SET 
+SET
   is_running = false,
   playthrough_end_time = NOW(),
   last_activity_time = NOW()
@@ -142,6 +142,54 @@ func (q *Queries) GetGame(ctx context.Context, id uuid.UUID) (Game, error) {
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const ListActiveGames = `-- name: ListActiveGames :many
+SELECT id, name, description, starting_message, scenario, objectives, skills, characteristics, relationship, is_template, is_running, playthrough_start_time, playthrough_end_time, last_activity_time, created_at, updated_at FROM games WHERE is_running = true
+ORDER BY created_at DESC
+LIMIT $1 OFFSET $2
+`
+
+type ListActiveGamesParams struct {
+	Limit  int32 `json:"limit"`
+	Offset int32 `json:"offset"`
+}
+
+func (q *Queries) ListActiveGames(ctx context.Context, arg ListActiveGamesParams) ([]Game, error) {
+	rows, err := q.db.Query(ctx, ListActiveGames, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Game{}
+	for rows.Next() {
+		var i Game
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Description,
+			&i.StartingMessage,
+			&i.Scenario,
+			&i.Objectives,
+			&i.Skills,
+			&i.Characteristics,
+			&i.Relationship,
+			&i.IsTemplate,
+			&i.IsRunning,
+			&i.PlaythroughStartTime,
+			&i.PlaythroughEndTime,
+			&i.LastActivityTime,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const ListGameTemplates = `-- name: ListGameTemplates :many
@@ -237,7 +285,7 @@ func (q *Queries) ListGames(ctx context.Context, arg ListGamesParams) ([]Game, e
 
 const StartGame = `-- name: StartGame :one
 UPDATE games
-SET 
+SET
   is_running = true,
   is_template = false,
   playthrough_start_time = NOW(),
@@ -272,7 +320,7 @@ func (q *Queries) StartGame(ctx context.Context, id uuid.UUID) (Game, error) {
 
 const UpdateGame = `-- name: UpdateGame :one
 UPDATE games
-SET 
+SET
   name = $2,
   description = $3,
   starting_message = $4,

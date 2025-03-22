@@ -9,16 +9,22 @@ WHERE cta.character_id = $1 AND cta.relationship_type = $2
 ORDER BY ca.name ASC;
 
 -- name: CreateCharacterAttribute :one
-INSERT INTO character_attributes (
-  name, value, attribute_type
-) VALUES (
-  $1, $2, $3
+WITH inserted AS (
+  INSERT INTO character_attributes (name, value, attribute_type)
+  VALUES ($1, $2, sqlc.arg(attribute_type))
+  RETURNING *
 )
+INSERT INTO character_to_attributes (character_id, attribute_id, relationship_type)
+SELECT
+  sqlc.arg(character_id)::uuid,
+  inserted.id,
+  sqlc.arg(attribute_type)
+FROM inserted
 RETURNING *;
 
 -- name: UpdateCharacterAttribute :one
 UPDATE character_attributes
-SET 
+SET
   name = $2,
   value = $3,
   attribute_type = $4

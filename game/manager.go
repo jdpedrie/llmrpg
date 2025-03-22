@@ -2,298 +2,136 @@ package game
 
 import (
 	"context"
+	"database/sql"
 	"errors"
-	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jdpedrie/llmrpg/model"
 	"github.com/jdpedrie/llmrpg/pkg/postgres"
 )
 
-// Manager handles game operations
+// Manager handles game session lifecycle
 type Manager struct {
-	db *postgres.DB
+	pool    *pgxpool.Pool
+	queries *postgres.Queries
+	engine  *Engine
 }
 
 // NewManager creates a new game manager
-func NewManager(db *postgres.DB) *Manager {
-	return &Manager{db: db}
+func NewManager(pool *pgxpool.Pool, queries *postgres.Queries) *Manager {
+	return &Manager{
+		pool:    pool,
+		queries: queries,
+	}
 }
 
-// Templates returns all game templates
-func (m *Manager) Templates(ctx context.Context) ([]model.Game, error) {
-	templates, err := m.db.ListGameTemplates(ctx)
+// SetEngine sets the engine for the manager
+func (m *Manager) SetEngine(engine *Engine) {
+	m.engine = engine
+}
+
+// ListGameTemplates lists all game templates
+func (m *Manager) ListGameTemplates(ctx context.Context) ([]model.Game, error) {
+	templates, err := m.queries.ListGameTemplates(ctx)
 	if err != nil {
 		return nil, err
 	}
 
 	games := make([]model.Game, 0, len(templates))
-	for _, t := range templates {
-		// For templates listing, we don't need to load the full game data with characters and inventory
-		game := model.Game{
-			ID:              t.ID,
-			Name:            t.Name,
-			Description:     postgres.StringFromText(t.Description),
-			StartingMessage: postgres.StringFromText(t.StartingMessage),
-			Scenario:        postgres.StringFromText(t.Scenario),
-			Objectives:      postgres.StringFromText(t.Objectives),
-			Skills:          t.Skills,
-			Characteristics: t.Characteristics,
-			Relationship:    t.Relationship,
-			IsTemplate:      t.IsTemplate,
-			IsRunning:       t.IsRunning,
-			CreatedAt:       t.CreatedAt.Time,
-			UpdatedAt:       t.UpdatedAt.Time,
-		}
+	for _, template := range templates {
+		// Convert to model game without loading characters and inventory
+		// This is for listing purposes only
+		game := model.FromDBGame(template, nil, nil)
 		games = append(games, game)
 	}
 
 	return games, nil
 }
 
-// GetGame retrieves a game by ID with all its characters and inventory
-func (m *Manager) GetGame(ctx context.Context, id string) (*model.Game, error) {
-	gameID, err := uuid.Parse(id)
-	if err != nil {
-		return nil, fmt.Errorf("invalid game ID: %w", err)
-	}
-
-	// We need to execute several queries to fetch the full game data
-	var result *model.Game
-	err = m.db.WithTx(ctx, func(q *postgres.Queries) error {
-		// Get the game
-		dbGame, err := q.GetGame(ctx, gameID)
-		if err != nil {
-			return err
-		}
-
-		// Get the characters
-		dbCharacters, err := q.ListCharacters(ctx, gameID)
-		if err != nil {
-			return err
-		}
-
-		// Get the inventory
-		dbInventory, err := q.ListGameInventory(ctx, gameID)
-		if err != nil {
-			return err
-		}
-
-		// Build the full game with characters and their attributes
-		characters := make([]model.Character, 0, len(dbCharacters))
-		for _, dbChar := range dbCharacters {
-			// Get character skills
-			skills, err := q.ListCharacterAttributesByType(ctx, postgres.ListCharacterAttributesByTypeParams{
-				CharacterID:      dbChar.ID,
-				RelationshipType: "skill",
-			})
-			if err != nil {
-				return err
-			}
-
-			// Get character characteristics
-			characteristics, err := q.ListCharacterAttributesByType(ctx, postgres.ListCharacterAttributesByTypeParams{
-				CharacterID:      dbChar.ID,
-				RelationshipType: "characteristic",
-			})
-			if err != nil {
-				return err
-			}
-
-			// Get character relationships
-			relationships, err := q.ListCharacterAttributesByType(ctx, postgres.ListCharacterAttributesByTypeParams{
-				CharacterID:      dbChar.ID,
-				RelationshipType: "relationship",
-			})
-			if err != nil {
-				return err
-			}
-
-			character := model.FromDBCharacter(dbChar, skills, characteristics, relationships)
-			characters = append(characters, character)
-		}
-
-		// Convert inventory items
-		inventory := make([]model.InventoryItem, 0, len(dbInventory))
-		for _, item := range dbInventory {
-			inventory = append(inventory, model.FromDBInventoryItem(item))
-		}
-
-		// Create the full game model
-		game := model.FromDBGame(dbGame, characters, inventory)
-		result = &game
-		return nil
-	})
-
+// ListActiveGames lists all active games
+func (m *Manager) ListActiveGames(ctx context.Context) ([]model.Game, error) {
+	activeGames, err := m.queries.ListActiveGames(ctx, postgres.ListActiveGamesParams{})
 	if err != nil {
 		return nil, err
 	}
 
-	return result, nil
+	games := make([]model.Game, 0, len(activeGames))
+	for _, g := range activeGames {
+		// Convert to model game without loading characters and inventory
+		// This is for listing purposes only
+		game := model.FromDBGame(g, nil, nil)
+		games = append(games, game)
+	}
+
+	return games, nil
 }
 
-// CreateGame creates a new game
-func (m *Manager) CreateGame(ctx context.Context, game *model.Game) error {
-	if !postgres.IsUUIDEmpty(game.ID) {
-		return errors.New("game ID must be empty for creation")
+// EndGame marks a game as completed
+func (m *Manager) EndGame(ctx context.Context, gameID string) error {
+	gID, err := uuid.Parse(gameID)
+	if err != nil {
+		return err
 	}
 
-	// Use a transaction to create the game and all related entities
-	return m.db.WithTx(ctx, func(q *postgres.Queries) error {
-		// Create the game first
-		dbGame, err := q.CreateGame(ctx, postgres.CreateGameParams{
-			Name:            game.Name,
-			Description:     postgres.NewText(game.Description),
-			StartingMessage: postgres.NewText(game.StartingMessage),
-			Scenario:        postgres.NewText(game.Scenario),
-			Objectives:      postgres.NewText(game.Objectives),
-			Skills:          game.Skills,
-			Characteristics: game.Characteristics,
-			Relationship:    game.Relationship,
-			IsTemplate:      game.IsTemplate,
-			IsRunning:       game.IsRunning,
-		})
-		if err != nil {
-			return fmt.Errorf("error creating game: %w", err)
-		}
+	conn, err := m.pool.Acquire(ctx)
+	if err != nil {
+		return err
+	}
 
-		game.ID = dbGame.ID
-		game.CreatedAt = dbGame.CreatedAt.Time
-		game.UpdatedAt = dbGame.UpdatedAt.Time
+	defer conn.Release()
 
-		// Create all characters
-		for i := range game.Characters {
-			char := &game.Characters[i]
-			dbChar, err := q.CreateCharacter(ctx, postgres.CreateCharacterParams{
-				Name:          char.Name,
-				Description:   postgres.NewText(char.Description),
-				Context:       char.Context,
-				Active:        char.Active,
-				MainCharacter: char.MainCharacter,
-				GameID:        gameID{ID: game.ID, Valid: true},
-			})
-			if err != nil {
-				return fmt.Errorf("error creating character: %w", err)
-			}
+	tx, err := conn.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
 
-			char.ID = dbChar.ID
-			char.CreatedAt = dbChar.CreatedAt.Time
-			char.UpdatedAt = dbChar.UpdatedAt.Time
+	qtx := m.queries.WithTx(tx)
 
-			// Create character attributes (skills, characteristics, relationships)
-			if err := createCharacterAttributes(ctx, q, char); err != nil {
-				return err
-			}
-		}
+	if _, err := qtx.EndGame(ctx, gID); err != nil {
+		return err
+	}
 
-		// Create inventory items
-		for i := range game.Inventory {
-			item := &game.Inventory[i]
-			dbItem, err := q.CreateInventoryItem(ctx, postgres.CreateInventoryItemParams{
-				Name:        item.Name,
-				Description: item.Description,
-				Active:      item.Active,
-				GameID:      game.ID,
-			})
-			if err != nil {
-				return fmt.Errorf("error creating inventory item: %w", err)
-			}
-
-			item.ID = dbItem.ID
-			item.GameID = dbItem.GameID
-			item.CreatedAt = dbItem.CreatedAt.Time
-			item.UpdatedAt = dbItem.UpdatedAt.Time
-		}
-
-		return nil
-	})
+	return tx.Commit(ctx)
 }
 
-// Helper function to create and link character attributes
-func createCharacterAttributes(ctx context.Context, q *postgres.Queries, char *model.Character) error {
-	// Create skills
-	for i := range char.Skills {
-		attr := &char.Skills[i]
-		dbAttr, err := q.CreateCharacterAttribute(ctx, postgres.CreateCharacterAttributeParams{
-			Name:          attr.Name,
-			Value:         attr.Value,
-			AttributeType: "skill",
-		})
-		if err != nil {
-			return fmt.Errorf("error creating skill attribute: %w", err)
-		}
-
-		attr.ID = dbAttr.ID
-		attr.Type = dbAttr.AttributeType
-
-		// Link the attribute to the character
-		err = q.LinkCharacterAttribute(ctx, postgres.LinkCharacterAttributeParams{
-			CharacterID:      char.ID,
-			AttributeID:      attr.ID,
-			RelationshipType: "skill",
-		})
-		if err != nil {
-			return fmt.Errorf("error linking skill attribute: %w", err)
-		}
+// DeleteGame deletes a game and all related data
+func (m *Manager) DeleteGame(ctx context.Context, gameID string) error {
+	gID, err := uuid.Parse(gameID)
+	if err != nil {
+		return err
 	}
 
-	// Create characteristics
-	for i := range char.Characteristics {
-		attr := &char.Characteristics[i]
-		dbAttr, err := q.CreateCharacterAttribute(ctx, postgres.CreateCharacterAttributeParams{
-			Name:          attr.Name,
-			Value:         attr.Value,
-			AttributeType: "characteristic",
-		})
-		if err != nil {
-			return fmt.Errorf("error creating characteristic attribute: %w", err)
-		}
-
-		attr.ID = dbAttr.ID
-		attr.Type = dbAttr.AttributeType
-
-		// Link the attribute to the character
-		err = q.LinkCharacterAttribute(ctx, postgres.LinkCharacterAttributeParams{
-			CharacterID:      char.ID,
-			AttributeID:      attr.ID,
-			RelationshipType: "characteristic",
-		})
-		if err != nil {
-			return fmt.Errorf("error linking characteristic attribute: %w", err)
-		}
+	conn, err := m.pool.Acquire(ctx)
+	if err != nil {
+		return err
 	}
 
-	// Create relationships
-	for i := range char.Relationship {
-		attr := &char.Relationship[i]
-		dbAttr, err := q.CreateCharacterAttribute(ctx, postgres.CreateCharacterAttributeParams{
-			Name:          attr.Name,
-			Value:         attr.Value,
-			AttributeType: "relationship",
-		})
-		if err != nil {
-			return fmt.Errorf("error creating relationship attribute: %w", err)
-		}
+	defer conn.Release()
 
-		attr.ID = dbAttr.ID
-		attr.Type = dbAttr.AttributeType
+	tx, err := conn.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
 
-		// Link the attribute to the character
-		err = q.LinkCharacterAttribute(ctx, postgres.LinkCharacterAttributeParams{
-			CharacterID:      char.ID,
-			AttributeID:      attr.ID,
-			RelationshipType: "relationship",
-		})
-		if err != nil {
-			return fmt.Errorf("error linking relationship attribute: %w", err)
+	qtx := m.queries.WithTx(tx)
+
+	// Check if the game exists
+	_, err = qtx.GetGame(ctx, gID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return errors.New("game not found")
 		}
+		return err
 	}
 
-	return nil
-}
+	// Delete the game and all related data
+	if err := qtx.DeleteGame(ctx, gID); err != nil {
+		return err
+	}
 
-// gameID is a helper type for handling nullable UUIDs
-type gameID struct {
-	ID    uuid.UUID
-	Valid bool
+	return tx.Commit(ctx)
 }

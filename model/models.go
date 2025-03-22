@@ -375,3 +375,15 @@ func FromDBHistory(h postgres.History) History {
 		CreatedAt: h.CreatedAt.Time,
 	}
 }
+
+// Action represents a user action in the game
+type Action struct {
+	Choice  string
+	Outcome string
+}
+
+// ActionResult represents a result from processing an action
+type ActionResult struct {
+	Message string
+	Final   bool
+}

@@ -16,7 +16,7 @@ const CreateCharacter = `-- name: CreateCharacter :one
 INSERT INTO characters (
   name, description, context, active, main_character, game_id
 ) VALUES (
-  $1, $2, $3, $4, $5, $6
+  $1, $2, $3, $4, $5, $6::uuid
 )
 RETURNING id, name, description, context, active, main_character, game_id, created_at, updated_at
 `
@@ -27,7 +27,7 @@ type CreateCharacterParams struct {
 	Context       []string    `json:"context"`
 	Active        bool        `json:"active"`
 	MainCharacter bool        `json:"main_character"`
-	GameID        pgtype.UUID `json:"game_id"`
+	GameID        uuid.UUID   `json:"game_id"`
 }
 
 func (q *Queries) CreateCharacter(ctx context.Context, arg CreateCharacterParams) (Character, error) {
@@ -124,7 +124,7 @@ func (q *Queries) ListCharacters(ctx context.Context, gameID pgtype.UUID) ([]Cha
 
 const UpdateCharacter = `-- name: UpdateCharacter :one
 UPDATE characters
-SET 
+SET
   name = $2,
   description = $3,
   context = $4,

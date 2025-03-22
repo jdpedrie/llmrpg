@@ -13,6 +13,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.5.5
 	github.com/pgvector/pgvector-go v0.1.1
+	github.com/sashabaranov/go-openai v1.38.1
 	github.com/urfave/cli/v2 v2.27.6
 	github.com/weaviate/weaviate v1.27.0
 	golang.org/x/net v0.29.0

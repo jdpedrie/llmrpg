@@ -15,20 +15,21 @@ import (
 
 const CreateGameContext = `-- name: CreateGameContext :one
 INSERT INTO game_contexts (
-  game_id, content
+  game_id, content, embedding
 ) VALUES (
-  $1, $2
+  $1, $2, $3
 )
 RETURNING id, game_id, content, embedding, created_at, updated_at
 `
 
 type CreateGameContextParams struct {
-	GameID  uuid.UUID `json:"game_id"`
-	Content string    `json:"content"`
+	GameID    uuid.UUID       `json:"game_id"`
+	Content   string          `json:"content"`
+	Embedding pgvector.Vector `json:"embedding"`
 }
 
 func (q *Queries) CreateGameContext(ctx context.Context, arg CreateGameContextParams) (GameContext, error) {
-	row := q.db.QueryRow(ctx, CreateGameContext, arg.GameID, arg.Content)
+	row := q.db.QueryRow(ctx, CreateGameContext, arg.GameID, arg.Content, arg.Embedding)
 	var i GameContext
 	err := row.Scan(
 		&i.ID,

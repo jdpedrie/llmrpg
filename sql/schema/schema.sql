@@ -100,6 +100,16 @@ CREATE TABLE game_contexts (
     FOREIGN KEY (game_id) REFERENCES games(id) ON DELETE CASCADE
 );
 
+-- Context queries table - stores questions for semantic retrieval
+CREATE TABLE context_queries (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    game_id UUID NOT NULL,
+    query TEXT NOT NULL,
+    used BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    FOREIGN KEY (game_id) REFERENCES games(id) ON DELETE CASCADE
+);
+
 -- Triggers for updated_at columns
 CREATE OR REPLACE FUNCTION update_modified_column()
 RETURNS TRIGGER AS $$

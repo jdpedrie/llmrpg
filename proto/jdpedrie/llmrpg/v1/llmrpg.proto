@@ -18,9 +18,10 @@ message PlayRequest {
 }
 
 message PlayResponse {
-  Game game = 1;
-
-  string message = 2;
+  oneof resp {
+    Game game = 1;
+    string message = 2;
+  }
 }
 
 message Game {

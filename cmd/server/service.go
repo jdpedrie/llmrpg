@@ -3,14 +3,14 @@ package server
 import (
 	"context"
 	"errors"
+	"io"
+	"log"
 
 	"connectrpc.com/connect"
-	"github.com/google/uuid"
 	"github.com/jdpedrie/llmrpg/game"
 	v1 "github.com/jdpedrie/llmrpg/genproto/jdpedrie/llmrpg/v1"
 	"github.com/jdpedrie/llmrpg/genproto/jdpedrie/llmrpg/v1/v1connect"
 	"github.com/jdpedrie/llmrpg/model"
-	"github.com/jdpedrie/llmrpg/pkg/postgres"
 )
 
 type LLMRPCService struct {
@@ -20,46 +20,106 @@ type LLMRPCService struct {
 	engine  *game.Engine
 }
 
-func (s *LLMRPCService) StartGame(
-	ctx context.Context, req *connect.Request[v1.StartGameRequest],
-) (*connect.Response[v1.StartGameResponse], error) {
-	game, err := s.engine.StartGame(ctx, req.Msg.TemplateId)
-	if err != nil {
-		return nil, err
+func NewLLMRPCService(manager *game.Manager, engine *game.Engine) *LLMRPCService {
+	return &LLMRPCService{
+		manager: manager,
+		engine:  engine,
 	}
-
-	return &connect.Response[v1.StartGameResponse]{
-		Msg: &v1.StartGameResponse{
-			GameId: game.GameID(),
-		},
-	}, nil
 }
 
-func (s *LLMRPCService) CreateGame(
-	ctx context.Context, req *connect.Request[v1.CreateGameRequest],
-) (*connect.Response[v1.CreateGameResponse], error) {
-	var game model.Game
-	if err := game.FromProto(req.Msg.Game); err != nil {
-		return nil, err
-	}
+func (s *LLMRPCService) Play(
+	ctx context.Context, stream *connect.BidiStream[v1.PlayRequest, v1.PlayResponse],
+) error {
+	for {
+		req, err := stream.Receive()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return nil
+			}
+			return err
+		}
 
-	if !postgres.IsUUIDEmpty(game.ID) {
-		return nil, errors.New("game id must be empty")
-	}
+		// Get the current game state
+		gameID := req.GameId
+		if gameID == "" {
+			return connect.NewError(connect.CodeInvalidArgument, errors.New("game_id is required"))
+		}
 
-	if err := s.engine.CreateGame(ctx, &game); err != nil {
-		return nil, err
-	}
+		game, err := s.engine.GetGame(ctx, gameID)
+		if err != nil {
+			return connect.NewError(connect.CodeNotFound, errors.New("game not found"))
+		}
 
-	// 2nd query because nested IDs not returned above.
-	g, err := s.engine.GetGame(ctx, game.ID.String())
-	if err != nil {
-		return nil, err
-	}
+		// Send initial game state to client
+		if err := stream.Send(&v1.PlayResponse{
+			Resp: &v1.PlayResponse_Game{
+				Game: game.ToProto(),
+			},
+		}); err != nil {
+			return err
+		}
 
-	return &connect.Response[v1.CreateGameResponse]{
-		Msg: &v1.CreateGameResponse{
-			Game: g.ToProto(),
-		},
-	}, nil
+		// Process user action if provided
+		if req.Choice != "" {
+			// Create a channel to receive streaming responses from the game engine
+			responseChan := make(chan *model.ActionResult)
+			errorChan := make(chan error, 1)
+
+			// Process the action in a goroutine
+			go func() {
+				err := s.engine.ReceiveAction(ctx, gameID, &model.Action{
+					Choice:  req.Choice,
+					Outcome: req.Outcome,
+				}, responseChan)
+				errorChan <- err
+			}()
+
+			// Stream responses back to client
+		processingLoop:
+			for {
+				select {
+				case result, ok := <-responseChan:
+					if !ok {
+						// Channel closed, action processing complete
+						break processingLoop
+					}
+
+					// Send the message to the client
+					err := stream.Send(&v1.PlayResponse{
+						Resp: &v1.PlayResponse_Message{
+							Message: result.Message,
+						},
+					})
+					if err != nil {
+						log.Printf("Error sending response: %v", err)
+						return err
+					}
+
+					// If this is the final response, send the updated game state
+					if result.Final {
+						updatedGame, err := s.engine.GetGame(ctx, gameID)
+						if err != nil {
+							return err
+						}
+
+						if err := stream.Send(&v1.PlayResponse{
+							Resp: &v1.PlayResponse_Game{
+								Game: updatedGame.ToProto(),
+							},
+						}); err != nil {
+							return err
+						}
+					}
+				case err := <-errorChan:
+					if err != nil {
+						return connect.NewError(connect.CodeInternal, err)
+					}
+					// Action completed successfully
+					break processingLoop
+				case <-ctx.Done():
+					return ctx.Err()
+				}
+			}
+		}
+	}
 }
